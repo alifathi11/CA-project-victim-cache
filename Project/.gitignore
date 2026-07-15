@@ -1,6 +1,0 @@
-/bin/
-/out/
-*.log
-*.csv
-*.json
-.DS_Store
