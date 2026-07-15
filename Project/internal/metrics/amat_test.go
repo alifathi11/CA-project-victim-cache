@@ -13,3 +13,11 @@ func TestCalculateAMAT(t *testing.T) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
+
+func TestCalculateBaselineAMAT(t *testing.T) {
+	got := CalculateBaselineAMAT(1, 0.25, 32)
+	want := 9.0
+	if got != want {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
