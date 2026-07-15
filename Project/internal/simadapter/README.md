@@ -1,15 +1,5 @@
-# Akita adapter layer
+# Simulation adapter
 
-این پوشه محل اتصال مدل مستقل پروژه به Akita است.
+`adapter.go` provides the complete synchronous reference runner used for deterministic correctness tests.
 
-TODOهای مرحله اتصال:
-
-- ساخت Engine آکیتا
-- تعریف Component/Spec/State برای traffic generator، L1، Victim Cache، L2 و Memory
-- تعریف پورت‌های ورودی و خروجی
-- ساخت connectionها
-- تبدیل `model.Request` به پیام Akita
-- زمان‌بندی latencyها با زمان شبیه‌سازی
-- ثبت trace و metric
-
-در مرحله اول هیچ import از Akita وجود ندارد تا اسکلت به API یک نسخه خاص قفل نشود.
+For an actual Akita event-driven implementation, keep the same `System`, request model, cache policies, and metrics, but wrap them with Akita components, ports, messages, and scheduled events. Detailed steps are in the repository root file `AKITA_INTEGRATION.md`.

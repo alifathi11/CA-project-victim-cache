@@ -8,11 +8,15 @@ import (
 const (
 	ReplacementFIFO = "FIFO"
 	ReplacementLRU  = "LRU"
+
+	TopologyMemoryOnly = "memory"
+	TopologyL1         = "l1"
+	TopologyL1L2       = "l1-l2"
+	TopologyFull       = "full"
 )
 
-// Config contains the parameters that may be varied during experiments.
-// Sizes are expressed in bytes and latencies are expressed in cycles.
 type Config struct {
+	Topology            string
 	BlockSizeBytes      uint64
 	L1SizeBytes         uint64
 	L1Associativity     int
@@ -28,29 +32,25 @@ type Config struct {
 }
 
 func Default() Config {
-	return Config{
-		BlockSizeBytes:      64,
-		L1SizeBytes:         4 * 1024,
-		L1Associativity:     1,
-		VictimEntries:       8,
-		VictimEnabled:       false,
-		VictimPolicy:        ReplacementFIFO,
-		L2SizeBytes:         64 * 1024,
-		L2Associativity:     8,
-		L1HitLatencyCycles:  1,
-		VictimLatencyCycles: 2,
-		L2LatencyCycles:     12,
-		MemoryLatencyCycles: 100,
-	}
+	return Config{Topology: TopologyFull, BlockSizeBytes: 64, L1SizeBytes: 4 * 1024, L1Associativity: 1,
+		VictimEntries: 8, VictimEnabled: true, VictimPolicy: ReplacementFIFO,
+		L2SizeBytes: 64 * 1024, L2Associativity: 8,
+		L1HitLatencyCycles: 1, VictimLatencyCycles: 2, L2LatencyCycles: 12, MemoryLatencyCycles: 100}
 }
 
-// NormalizedVictimPolicy returns the configured replacement policy in the
-// canonical form used by the cache implementation.
 func (c Config) NormalizedVictimPolicy() string {
 	return strings.ToUpper(strings.TrimSpace(c.VictimPolicy))
 }
+func (c Config) NormalizedTopology() string { return strings.ToLower(strings.TrimSpace(c.Topology)) }
+func (c Config) UsesL1() bool               { return c.NormalizedTopology() != TopologyMemoryOnly }
+func (c Config) UsesL2() bool {
+	t := c.NormalizedTopology()
+	return t == TopologyL1L2 || t == TopologyFull
+}
+func (c Config) UsesVictim() bool {
+	return c.NormalizedTopology() == TopologyFull && c.VictimEnabled && c.VictimEntries > 0
+}
 
-// ValidateL1 checks the invariants required by the direct-mapped L1.
 func (c Config) ValidateL1() error {
 	if c.BlockSizeBytes == 0 {
 		return fmt.Errorf("block size must be greater than zero")
@@ -59,12 +59,10 @@ func (c Config) ValidateL1() error {
 		return fmt.Errorf("L1 size must be non-zero and divisible by block size")
 	}
 	if c.L1Associativity != 1 {
-		return fmt.Errorf("L1 must be direct-mapped (associativity = 1)")
+		return fmt.Errorf("L1 must be direct-mapped")
 	}
 	return nil
 }
-
-// ValidateL2 checks the invariants required by the set-associative L2.
 func (c Config) ValidateL2() error {
 	if c.BlockSizeBytes == 0 {
 		return fmt.Errorf("block size must be greater than zero")
@@ -72,39 +70,42 @@ func (c Config) ValidateL2() error {
 	if c.L2Associativity <= 0 {
 		return fmt.Errorf("L2 associativity must be greater than zero")
 	}
-	l2SetBytes := c.BlockSizeBytes * uint64(c.L2Associativity)
-	if c.L2SizeBytes == 0 || c.L2SizeBytes%l2SetBytes != 0 {
-		return fmt.Errorf("L2 size must be non-zero and divisible by block size times associativity")
+	x := c.BlockSizeBytes * uint64(c.L2Associativity)
+	if c.L2SizeBytes == 0 || c.L2SizeBytes%x != 0 {
+		return fmt.Errorf("L2 size must be divisible by block size times associativity")
 	}
 	return nil
 }
-
-// ValidateVictim checks the invariants required by the Victim Cache.
 func (c Config) ValidateVictim() error {
-	if c.BlockSizeBytes == 0 {
-		return fmt.Errorf("block size must be greater than zero")
-	}
 	if c.VictimEntries < 0 {
-		return fmt.Errorf("victim cache entry count cannot be negative")
+		return fmt.Errorf("victim entries cannot be negative")
 	}
-	policy := c.NormalizedVictimPolicy()
-	if policy != ReplacementFIFO && policy != ReplacementLRU {
-		return fmt.Errorf("unsupported victim cache replacement policy %q", c.VictimPolicy)
+	p := c.NormalizedVictimPolicy()
+	if p != ReplacementFIFO && p != ReplacementLRU {
+		return fmt.Errorf("unsupported victim policy %q", c.VictimPolicy)
 	}
 	return nil
 }
-
-// ValidateMemoryHierarchy checks all invariants required by the memory and
-// cache components. It deliberately does not validate benchmark or CPU settings.
 func (c Config) ValidateMemoryHierarchy() error {
-	if err := c.ValidateL1(); err != nil {
-		return err
+	switch c.NormalizedTopology() {
+	case TopologyMemoryOnly:
+		return nil
+	case TopologyL1:
+		return c.ValidateL1()
+	case TopologyL1L2:
+		if err := c.ValidateL1(); err != nil {
+			return err
+		}
+		return c.ValidateL2()
+	case TopologyFull:
+		if err := c.ValidateL1(); err != nil {
+			return err
+		}
+		if err := c.ValidateL2(); err != nil {
+			return err
+		}
+		return c.ValidateVictim()
+	default:
+		return fmt.Errorf("unsupported topology %q", c.Topology)
 	}
-	if err := c.ValidateL2(); err != nil {
-		return err
-	}
-	if err := c.ValidateVictim(); err != nil {
-		return err
-	}
-	return nil
 }

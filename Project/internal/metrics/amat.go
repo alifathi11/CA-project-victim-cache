@@ -13,3 +13,7 @@ type AMATInputs struct {
 func CalculateAMAT(in AMATInputs) float64 {
 	return in.L1HitTime + in.L1MissRate*(in.VictimHitRate*in.VictimPenalty+in.VictimMissRate*in.L2Penalty)
 }
+
+func CalculateBaselineAMAT(l1HitTime, l1MissRate, l2Penalty float64) float64 {
+	return l1HitTime + l1MissRate*l2Penalty
+}
