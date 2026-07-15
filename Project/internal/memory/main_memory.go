@@ -2,17 +2,32 @@ package memory
 
 import "victimcacheproject/internal/model"
 
+// MainMemory is a minimal deterministic backing store indexed by block address.
+// It models functional block persistence but deliberately does not model Akita
+// events or latency; those belong to the system/adapter layers.
 type MainMemory struct {
-	// TODO(stage-3): Add optional backing storage and latency configuration.
+	blocks map[uint64]model.Block
 }
 
-func NewMainMemory() *MainMemory { return &MainMemory{} }
+func NewMainMemory() *MainMemory {
+	return &MainMemory{blocks: make(map[uint64]model.Block)}
+}
 
 func (m *MainMemory) ReadBlock(blockAddress uint64) model.Block {
-	// TODO(stage-3): Return a valid block aligned to block size.
-	return model.Block{Address: blockAddress, Valid: true}
+	if block, found := m.blocks[blockAddress]; found {
+		block.Valid = true
+		block.Dirty = false
+		return block
+	}
+
+	block := model.NewBlock(blockAddress)
+	m.blocks[blockAddress] = block
+	return block
 }
 
 func (m *MainMemory) WriteBlock(block model.Block) {
-	// TODO(stage-3): Persist dirty blocks only if functional data is modeled.
+	block.Valid = true
+	// Main Memory is the point where dirty data is considered persisted.
+	block.Dirty = false
+	m.blocks[block.Address] = block
 }
